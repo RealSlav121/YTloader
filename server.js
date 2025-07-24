@@ -1,5 +1,5 @@
 const express = require('express');
-const ytdlp = require('yt-dlp-exec').default;
+const ytdlp = require('yt-dlp-exec');
 const fs = require('fs');
 const path = require('path');
 const app = express();
