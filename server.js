@@ -1,6 +1,7 @@
 const express = require('express');
-const cp = require('child_process');
+const ytdlp = require('yt-dlp-exec').default;
 const fs = require('fs');
+const path = require('path');
 const app = express();
 
 // Serve static files from the 'public' folder
@@ -24,55 +25,66 @@ app.get('/download', async (req, res) => {
     }
 
     try {
-        // Get video title using yt-dlp
-        const titleCmd = ['yt-dlp', '--get-title', url];
-        console.log('Fetching title with command:', titleCmd.join(' '));
-        const titleResult = cp.spawnSync('yt-dlp', titleCmd.slice(1), { encoding: 'utf8' });
-        if (titleResult.error) {
-            console.error('Title fetch error:', titleResult.error.message);
-            throw titleResult.error;
+        // Clean URL to remove playlist and other noise
+        const cleanUrl = url.replace(/&list=.*|&start_radio=.*|&t=.*|&index=.*|&ab_channel=.*|&pp=.*|&feature=.*$/, '');
+        console.log('Cleaned URL:', cleanUrl);
+
+        // Get video metadata to extract title
+        let title = 'video';
+        try {
+            const info = await ytdlp(cleanUrl, {
+                dumpSingleJson: true,
+                noCheckCertificates: true
+            });
+            title = info.title ? info.title.replace(/[^\w\s\u0400-\u04FF]/gi, '') : 'video';
+        } catch (err) {
+            console.warn('Could not fetch title. Using fallback.', err.message);
         }
-        if (titleResult.status !== 0) {
-            console.error('Title fetch failed:', titleResult.stderr);
-            throw new Error('Failed to fetch title');
-        }
-        const title = titleResult.stdout.trim().replace(/[^\w\s]/gi, '');
-        const filename = `${title}-${Date.now()}.${format}`; // Unique filename with title
+
+        const filename = `${title}-${Date.now()}.${format}`;
+        const filepath = path.join(__dirname, filename);
 
         // Download video or audio
-        const cmd = format === 'mp4' ? 
-            ['yt-dlp', '-f', 'bestvideo[vcodec^=avc1]+bestaudio', '--merge-output-format', 'mp4', '-o', filename, url] :
-            ['yt-dlp', '-x', '--audio-format', 'mp3', '--embed-metadata', '-o', filename, url];
+        const downloadArgs = {
+            output: filepath,
+            noCheckCertificates: true,
+            ffmpegLocation: '/usr/bin/ffmpeg' // optional
+        };
 
-        console.log('Running yt-dlp command:', cmd.join(' '));
-        const downloadResult = cp.spawnSync('yt-dlp', cmd.slice(1), { stdio: 'inherit' });
-        if (downloadResult.error) {
-            console.error('Download error:', downloadResult.error.message);
-            throw downloadResult.error;
-        }
-        if (downloadResult.status !== 0) {
-            console.error('Download failed:', downloadResult.stderr);
-            throw new Error('Failed to download');
+        if (format === 'mp4') {
+            downloadArgs.format = 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/mp4';
+            downloadArgs.mergeOutputFormat = 'mp4';
+        } else if (format === 'mp3') {
+            downloadArgs.extractAudio = true;
+            downloadArgs.audioFormat = 'mp3';
+            downloadArgs.embedMetadata = true;
+        } else {
+            return res.status(400).send('Invalid format. Use mp4 or mp3.');
         }
 
-        res.download(filename, `${title}.${format}`, (err) => {
+        console.log('Starting yt-dlp download...');
+        await ytdlp(cleanUrl, downloadArgs);
+
+        res.download(filepath, `${title}.${format}`, (err) => {
             if (err) {
                 console.error('Download error:', err.message);
-                res.status(500).send('Error downloading file');
+                res.status(500).send('Error sending file');
             }
-            // Clean up the file after download
-            fs.unlink(filename, (unlinkErr) => {
-                if (unlinkErr) console.error('Error deleting file:', unlinkErr.message);
+
+            // Clean up file after sending
+            fs.unlink(filepath, (unlinkErr) => {
+                if (unlinkErr) console.error('Failed to delete file:', unlinkErr.message);
             });
         });
+
     } catch (error) {
-        console.error('yt-dlp error:', error.message, error.stack);
-        res.status(500).send('Error: Invalid URL or video unavailable');
+        console.error('Unexpected error:', error.message, error.stack);
+        res.status(500).send('Error processing download request');
     }
 });
 
-// Start the server
-const port = process.env.PORT || 3000;
-app.listen(port, () => {
-    console.log(`Server running on port ${port}`);
+// Start the server on the correct port
+const port = process.env.PORT || 8080;
+app.listen(port, '0.0.0.0', () => {
+    console.log(`Server running on http://0.0.0.0:${port}`);
 });
