@@ -53,7 +53,7 @@ app.get('/download', async (req, res) => {
   };
 
   if (format === 'mp4') {
-    downloadArgs.format = 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/mp4';
+    downloadArgs.format = 'bv*[vcodec*=avc1]+ba[acodec*=mp4a]/mp4';
     downloadArgs.mergeOutputFormat = 'mp4';
   } else if (format === 'mp3') {
     downloadArgs.extractAudio = true;
