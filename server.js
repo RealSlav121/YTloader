@@ -2,6 +2,12 @@ const express = require('express');
 const ytdlp = require('yt-dlp-exec');
 const fs = require('fs');
 const path = require('path');
+
+if (process.env.YOUTUBE_COOKIES) {
+  const cookiePath = path.join(__dirname, 'cookies.txt');
+  fs.writeFileSync(cookiePath, process.env.YOUTUBE_COOKIES);
+}
+
 const app = express();
 
 // Serve static files from 'public' (if needed)
