@@ -1,4 +1,24 @@
+# Dependencies
 node_modules/
+
+# Environment variables
+.env
+
+# Logs
+*.log
+nohup.out
+
+# System files
+.DS_Store
+
+# Runtime data
+server.pid
+
+# Tunnel files
+tunnel_pipe
+
+# Cookies
+cookies.txt
 *.mp3
 *.mp4
 venv/
